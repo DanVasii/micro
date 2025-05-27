@@ -1,0 +1,99 @@
+# docker-compose.yml - Copiază în root-ul proiectului
+version: '3.8'
+
+services:
+  # MySQL Database pentru User Service
+  user-db:
+    image: mysql:8.0
+    container_name: footwear-user-db
+    environment:
+      MYSQL_DATABASE: user_db
+      MYSQL_USER: root
+      MYSQL_PASSWORD:
+      MYSQL_ROOT_PASSWORD:
+    ports:
+      - "3306:3306"
+    volumes:
+      - user_data:/var/lib/mysql
+    restart: unless-stopped
+    networks:
+      - footwear-network
+
+  # MySQL Database pentru Product Service
+  product-db:
+    image: mysql:8.0
+    container_name: footwear-product-db
+    environment:
+      MYSQL_DATABASE: product_db
+      MYSQL_USER: root
+      MYSQL_PASSWORD:
+      MYSQL_ROOT_PASSWORD:
+    ports:
+      - "3307:3306"
+    volumes:
+      - product_data:/var/lib/mysql
+    restart: unless-stopped
+    networks:
+      - footwear-network
+
+  # MySQL Database pentru Inventory Service
+  inventory-db:
+    image: mysql:8.0
+    container_name: footwear-inventory-db
+    environment:
+      MYSQL_DATABASE: inventory_db
+      MYSQL_USER: root
+      MYSQL_PASSWORD:
+      MYSQL_ROOT_PASSWORD:
+    ports:
+      - "3308:3306"
+    volumes:
+      - inventory_data:/var/lib/mysql
+    restart: unless-stopped
+    networks:
+      - footwear-network
+
+  # phpMyAdmin pentru administrarea bazelor de date (opțional)
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: footwear-phpmyadmin
+    environment:
+      PMA_ARBITRARY: 1
+      PMA_HOST: user-db
+      PMA_USER: mysql_user
+      PMA_PASSWORD: password
+    ports:
+      - "8090:80"
+    depends_on:
+      - user-db
+      - product-db
+      - inventory-db
+    networks:
+      - footwear-network
+
+volumes:
+  user_data:
+  product_data:
+  inventory_data:
+
+networks:
+  footwear-network:
+    driver: bridge
+
+---
+
+# .env - Creează acest fișier în root pentru variabile de mediu (opțional)
+# Database Configuration
+DB_USER=root
+DB_PASSWORD=
+DB_ROOT_PASSWORD=
+  
+  # Database Names
+USER_DB_NAME=user_db
+PRODUCT_DB_NAME=product_db
+INVENTORY_DB_NAME=inventory_db
+  
+  # Database Ports
+USER_DB_PORT=3306
+PRODUCT_DB_PORT=3307
+INVENTORY_DB_PORT=3308

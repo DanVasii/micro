@@ -1,0 +1,16 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+
+app:
+  services:
+    user: http://localhost:8081
+    product: http://localhost:8082
+    inventory: http://localhost:8083
+
+logging:
+  level:
+    com.footwear.gateway: DEBUG
