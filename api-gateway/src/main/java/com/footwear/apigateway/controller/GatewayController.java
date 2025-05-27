@@ -1,4 +1,3 @@
-
 package com.footwear.apigateway.controller;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -91,6 +90,82 @@ public class GatewayController {
     }
 
     // ==========================================
+    // PRODUCT ROUTES - COMPLETE
+    // ==========================================
+
+    @GetMapping("/api/products/**")
+    public ResponseEntity<String> getProducts(HttpServletRequest request,
+                                              @RequestHeader(value = "Authorization", required = false) String token) {
+        String path = extractPath(request, "/api/products");
+        String queryString = request.getQueryString();
+        if (queryString != null) {
+            path += "?" + queryString;
+        }
+        return forwardToProductService("/api/products" + path, "GET", null, token);
+    }
+
+    @PostMapping("/api/products/**")
+    public ResponseEntity<String> postProducts(HttpServletRequest request,
+                                               @RequestBody String body,
+                                               @RequestHeader(value = "Authorization", required = false) String token) {
+        String path = extractPath(request, "/api/products");
+        return forwardToProductService("/api/products" + path, "POST", body, token);
+    }
+
+    @PutMapping("/api/products/**")
+    public ResponseEntity<String> putProducts(HttpServletRequest request,
+                                              @RequestBody String body,
+                                              @RequestHeader(value = "Authorization", required = false) String token) {
+        String path = extractPath(request, "/api/products");
+        return forwardToProductService("/api/products" + path, "PUT", body, token);
+    }
+
+    @DeleteMapping("/api/products/**")
+    public ResponseEntity<String> deleteProducts(HttpServletRequest request,
+                                                 @RequestHeader(value = "Authorization", required = false) String token) {
+        String path = extractPath(request, "/api/products");
+        return forwardToProductService("/api/products" + path, "DELETE", null, token);
+    }
+
+    // ==========================================
+    // INVENTORY ROUTES - NEW!
+    // ==========================================
+
+    @GetMapping("/api/inventory/**")
+    public ResponseEntity<String> getInventory(HttpServletRequest request,
+                                               @RequestHeader(value = "Authorization", required = false) String token) {
+        String path = extractPath(request, "/api/inventory");
+        String queryString = request.getQueryString();
+        if (queryString != null) {
+            path += "?" + queryString;
+        }
+        return forwardToInventoryService("/api/inventory" + path, "GET", null, token);
+    }
+
+    @PostMapping("/api/inventory/**")
+    public ResponseEntity<String> postInventory(HttpServletRequest request,
+                                                @RequestBody String body,
+                                                @RequestHeader(value = "Authorization", required = false) String token) {
+        String path = extractPath(request, "/api/inventory");
+        return forwardToInventoryService("/api/inventory" + path, "POST", body, token);
+    }
+
+    @PutMapping("/api/inventory/**")
+    public ResponseEntity<String> putInventory(HttpServletRequest request,
+                                               @RequestBody String body,
+                                               @RequestHeader(value = "Authorization", required = false) String token) {
+        String path = extractPath(request, "/api/inventory");
+        return forwardToInventoryService("/api/inventory" + path, "PUT", body, token);
+    }
+
+    @DeleteMapping("/api/inventory/**")
+    public ResponseEntity<String> deleteInventory(HttpServletRequest request,
+                                                  @RequestHeader(value = "Authorization", required = false) String token) {
+        String path = extractPath(request, "/api/inventory");
+        return forwardToInventoryService("/api/inventory" + path, "DELETE", null, token);
+    }
+
+    // ==========================================
     // TEST ROUTES (pentru debugging)
     // ==========================================
 
@@ -116,17 +191,49 @@ public class GatewayController {
         }
     }
 
-    @GetMapping("/api/products/**")
-    public ResponseEntity<String> getProducts(HttpServletRequest request,
-                                              @RequestHeader(value = "Authorization", required = false) String token) {
-        String path = extractPath(request, "/api/products");
-        String queryString = request.getQueryString();
-        if (queryString != null) {
-            path += "?" + queryString;
+    @GetMapping("/test/product")
+    public ResponseEntity<String> testProductService() {
+        try {
+            String url = productServiceUrl + "/api/products/test";
+            String response = restTemplate.getForObject(url, String.class);
+            return ResponseEntity.ok("{\"gateway\":\"OK\",\"product-service\":\"" + response + "\"}");
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("{\"error\":\"Product service unavailable\",\"details\":\"" + e.getMessage() + "\"}");
         }
-        return forwardToProductService("/api/products" + path, "GET", null, token);
     }
 
+    @GetMapping("/test/product/health")
+    public ResponseEntity<String> testProductServiceHealth() {
+        try {
+            String url = productServiceUrl + "/api/products/health";
+            String response = restTemplate.getForObject(url, String.class);
+            return ResponseEntity.ok("{\"gateway\":\"OK\",\"product-service-health\":" + response + "}");
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("{\"error\":\"Product service health check failed\",\"details\":\"" + e.getMessage() + "\"}");
+        }
+    }
+
+    @GetMapping("/test/inventory")
+    public ResponseEntity<String> testInventoryService() {
+        try {
+            String url = inventoryServiceUrl + "/api/inventory/test";
+            String response = restTemplate.getForObject(url, String.class);
+            return ResponseEntity.ok("{\"gateway\":\"OK\",\"inventory-service\":\"" + response + "\"}");
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("{\"error\":\"Inventory service unavailable\",\"details\":\"" + e.getMessage() + "\"}");
+        }
+    }
+
+    @GetMapping("/test/inventory/health")
+    public ResponseEntity<String> testInventoryServiceHealth() {
+        try {
+            String url = inventoryServiceUrl + "/api/inventory/health";
+            String response = restTemplate.getForObject(url, String.class);
+            return ResponseEntity.ok("{\"gateway\":\"OK\",\"inventory-service-health\":" + response + "}");
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("{\"error\":\"Inventory service health check failed\",\"details\":\"" + e.getMessage() + "\"}");
+        }
+    }
 
     @GetMapping("/config")
     public ResponseEntity<String> showConfig() {
@@ -136,12 +243,17 @@ public class GatewayController {
     // ==========================================
     // HELPER METHODS
     // ==========================================
+
     private ResponseEntity<String> forwardToProductService(String path, String method, String body, String token) {
         return forwardRequest(productServiceUrl + path, method, body, token);
     }
 
     private ResponseEntity<String> forwardToUserService(String path, String method, String body, String token) {
         return forwardRequest(userServiceUrl + path, method, body, token);
+    }
+
+    private ResponseEntity<String> forwardToInventoryService(String path, String method, String body, String token) {
+        return forwardRequest(inventoryServiceUrl + path, method, body, token);
     }
 
     private ResponseEntity<String> forwardRequest(String url, String method, String body, String token) {

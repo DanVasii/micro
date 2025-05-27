@@ -114,4 +114,128 @@ public class UserService {
         dto.setActive(user.isActive());
         return dto;
     }
+
+    public UserDto getUserById(Long id, String token) {
+        validateAdminRole(token);
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        return convertToDto(user);
+    }
+
+    public UserDto updateUser(Long id, UpdateUserRequest request, String token) {
+        validateAdminRole(token);
+
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // Update fields if provided
+        if (request.getUsername() != null && !request.getUsername().trim().isEmpty()) {
+            // Check if username already exists for another user
+            userRepository.findByUsername(request.getUsername())
+                    .ifPresent(existingUser -> {
+                        if (!existingUser.getId().equals(id)) {
+                            throw new RuntimeException("Username already exists");
+                        }
+                    });
+            user.setUsername(request.getUsername().trim());
+        }
+
+        if (request.getEmail() != null && !request.getEmail().trim().isEmpty()) {
+            user.setEmail(request.getEmail().trim());
+        }
+
+        if (request.getPhone() != null) {
+            user.setPhone(request.getPhone().trim().isEmpty() ? null : request.getPhone().trim());
+        }
+
+        if (request.getRole() != null && !request.getRole().trim().isEmpty()) {
+            try {
+                UserRole role = UserRole.valueOf(request.getRole().toUpperCase());
+                user.setRole(role);
+            } catch (IllegalArgumentException e) {
+                throw new RuntimeException("Invalid role: " + request.getRole());
+            }
+        }
+
+        if (request.getStoreId() != null) {
+            user.setStoreId(request.getStoreId());
+        }
+
+        if (request.getActive() != null) {
+            user.setActive(request.getActive());
+        }
+
+        // Update password if provided
+        if (request.getPassword() != null && !request.getPassword().trim().isEmpty()) {
+            user.setPassword(passwordEncoder.encode(request.getPassword()));
+        }
+
+        user = userRepository.save(user);
+        return convertToDto(user);
+    }
+
+    public UserDto createUser(CreateUserRequest request, String token) {
+        validateAdminRole(token);
+
+        // Validate required fields
+        if (request.getUsername() == null || request.getUsername().trim().isEmpty()) {
+            throw new RuntimeException("Username is required");
+        }
+        if (request.getPassword() == null || request.getPassword().trim().isEmpty()) {
+            throw new RuntimeException("Password is required");
+        }
+        if (request.getEmail() == null || request.getEmail().trim().isEmpty()) {
+            throw new RuntimeException("Email is required");
+        }
+
+        // Check if username already exists
+        if (userRepository.findByUsername(request.getUsername().trim()).isPresent()) {
+            throw new RuntimeException("Username already exists");
+        }
+
+        User user = new User();
+        user.setUsername(request.getUsername().trim());
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setEmail(request.getEmail().trim());
+        user.setPhone(request.getPhone() != null ? request.getPhone().trim() : null);
+
+        // Set role (default to CLIENT if not specified)
+        UserRole role = UserRole.CLIENT;
+        if (request.getRole() != null && !request.getRole().trim().isEmpty()) {
+            try {
+                role = UserRole.valueOf(request.getRole().toUpperCase());
+            } catch (IllegalArgumentException e) {
+                throw new RuntimeException("Invalid role: " + request.getRole());
+            }
+        }
+        user.setRole(role);
+
+        user.setStoreId(request.getStoreId());
+        user.setActive(true);
+
+        user = userRepository.save(user);
+        return convertToDto(user);
+    }
+
+    public void deleteUser(Long id, String token) {
+        validateAdminRole(token);
+
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // Soft delete - just set active to false
+        user.setActive(false);
+        userRepository.save(user);
+    }
+
+    public UserDto reactivateUser(Long id, String token) {
+        validateAdminRole(token);
+
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        user.setActive(true);
+        user = userRepository.save(user);
+        return convertToDto(user);
+    }
 }

@@ -62,4 +62,60 @@ public class UserController {
             return ResponseEntity.status(403).body(null);
         }
     }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<UserDto> getUserById(@PathVariable Long id,
+                                               @RequestHeader("Authorization") String token) {
+        try {
+            return ResponseEntity.ok(userService.getUserById(id, token));
+        } catch (Exception e) {
+            return ResponseEntity.status(403).body(null);
+        }
+    }
+
+    // Admin - Update user
+    @PutMapping("/{id}")
+    public ResponseEntity<UserDto> updateUser(@PathVariable Long id,
+                                              @RequestBody UpdateUserRequest request,
+                                              @RequestHeader("Authorization") String token) {
+        try {
+            return ResponseEntity.ok(userService.updateUser(id, request, token));
+        } catch (Exception e) {
+            return ResponseEntity.status(403).body(null);
+        }
+    }
+
+    // Admin - Create user
+    @PostMapping("/create")
+    public ResponseEntity<UserDto> createUser(@RequestBody CreateUserRequest request,
+                                              @RequestHeader("Authorization") String token) {
+        try {
+            return ResponseEntity.ok(userService.createUser(request, token));
+        } catch (Exception e) {
+            return ResponseEntity.status(403).body(null);
+        }
+    }
+
+    // Admin - Delete user (soft delete)
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteUser(@PathVariable Long id,
+                                           @RequestHeader("Authorization") String token) {
+        try {
+            userService.deleteUser(id, token);
+            return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            return ResponseEntity.status(403).build();
+        }
+    }
+
+    // Admin - Reactivate user
+    @PostMapping("/{id}/reactivate")
+    public ResponseEntity<UserDto> reactivateUser(@PathVariable Long id,
+                                                  @RequestHeader("Authorization") String token) {
+        try {
+            return ResponseEntity.ok(userService.reactivateUser(id, token));
+        } catch (Exception e) {
+            return ResponseEntity.status(403).body(null);
+        }
+    }
 }
