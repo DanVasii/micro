@@ -1,3 +1,4 @@
+# user-service/src/main/resources/application.yml
 server:
   port: 8081
 
@@ -19,6 +20,61 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.MySQL8Dialect
 
+  # Configurări email pentru Hostinger
+  mail:
+    host: ${MAIL_HOST:smtp.hostinger.com}
+    port: ${MAIL_PORT:465}  # Pentru SSL
+    username: ${MAIL_USERNAME:dan@web-dev.dev}
+    password: ${MAIL_PASSWORD:u!Z2E1~rc}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          ssl:
+            enable: true
+            trust: smtp.hostinger.com
+          socketFactory:
+            port: 465
+            class: javax.net.ssl.SSLSocketFactory
+            fallback: false
+          connectiontimeout: 10000
+          timeout: 10000
+          writetimeout: 10000
+        debug: true  # Pentru debugging - dezactivează în producție
+
+# Pentru testare cu portul 587 (STARTTLS) - decomentează dacă vrei să încerci
+# spring:
+#   mail:
+#     host: smtp.hostinger.com
+#     port: 587
+#     username: dan@web-dev.dev
+#     password: your-password
+#     properties:
+#       mail:
+#         smtp:
+#           auth: true
+#           starttls:
+#             enable: true
+#             required: true
+#           connectiontimeout: 10000
+#           timeout: 10000
+#           writetimeout: 10000
+
+# Configurări pentru notificări
+sms:
+  api:
+    url: https://smsadvert.ro/api
+    key: ${SMS_API_KEY:eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2M2ZiYWUyMzhmODYyMDAwMDJiMDM2NzcifQ.TWTpn8QkKPwoLgPbJFK6C7QU3DAvEGWSOW4EhMLWfcQ}
+
+mail:
+  from:
+    email: ${MAIL_FROM_EMAIL:dan@web-dev.dev}
+    name: ${MAIL_FROM_NAME:FootwearChain}
+
 logging:
   level:
     com.footwear.userservice: DEBUG
+    com.footwear.userservice.service.NotificationService: INFO
+    com.footwear.userservice.service.EmailService: INFO
+    com.sun.mail: DEBUG  # Pentru debugging JavaMail
+    javax.mail: DEBUG    # Pentru debugging JavaMail

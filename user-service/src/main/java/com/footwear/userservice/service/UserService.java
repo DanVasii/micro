@@ -1,3 +1,4 @@
+// user-service/src/main/java/com/footwear/userservice/service/UserService.java
 package com.footwear.userservice.service;
 
 import com.footwear.userservice.dto.*;
@@ -8,7 +9,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -19,6 +22,9 @@ public class UserService {
 
     @Autowired
     private JwtService jwtService;
+
+    @Autowired
+    private NotificationService notificationService;
 
     private BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
@@ -63,6 +69,19 @@ public class UserService {
         user.setRole(UserRole.CLIENT); // Doar clienți prin înregistrare publică
 
         user = userRepository.save(user);
+
+        // Trimite email de bun venit (opțional)
+        try {
+            notificationService.sendUserUpdateEmail(
+                    user.getEmail(),
+                    user.getUsername(),
+                    "Welcome to FootwearChain! Your account has been created successfully."
+            );
+        } catch (Exception e) {
+            // Nu întrerupem procesul dacă email-ul eșuează
+            System.err.println("Failed to send welcome email: " + e.getMessage());
+        }
+
         return convertToDto(user);
     }
 
@@ -128,49 +147,98 @@ public class UserService {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
+        // Salvează valorile originale pentru comparație
+        String originalUsername = user.getUsername();
+        String originalEmail = user.getEmail();
+        String originalPhone = user.getPhone();
+        UserRole originalRole = user.getRole();
+        Long originalStoreId = user.getStoreId();
+        boolean originalActive = user.isActive();
+
+        // Colectează modificările
+        Map<String, Object> changes = new HashMap<>();
+
         // Update fields if provided
         if (request.getUsername() != null && !request.getUsername().trim().isEmpty()) {
-            // Check if username already exists for another user
-            userRepository.findByUsername(request.getUsername())
-                    .ifPresent(existingUser -> {
-                        if (!existingUser.getId().equals(id)) {
-                            throw new RuntimeException("Username already exists");
-                        }
-                    });
-            user.setUsername(request.getUsername().trim());
+            if (!request.getUsername().equals(originalUsername)) {
+                // Check if username already exists for another user
+                userRepository.findByUsername(request.getUsername())
+                        .ifPresent(existingUser -> {
+                            if (!existingUser.getId().equals(id)) {
+                                throw new RuntimeException("Username already exists");
+                            }
+                        });
+                user.setUsername(request.getUsername().trim());
+                changes.put("username", request.getUsername());
+            }
         }
 
         if (request.getEmail() != null && !request.getEmail().trim().isEmpty()) {
-            user.setEmail(request.getEmail().trim());
+            if (!request.getEmail().equals(originalEmail)) {
+                user.setEmail(request.getEmail().trim());
+                changes.put("email", request.getEmail());
+            }
         }
 
         if (request.getPhone() != null) {
-            user.setPhone(request.getPhone().trim().isEmpty() ? null : request.getPhone().trim());
+            String newPhone = request.getPhone().trim().isEmpty() ? null : request.getPhone().trim();
+            if (!java.util.Objects.equals(newPhone, originalPhone)) {
+                user.setPhone(newPhone);
+                changes.put("phone", newPhone);
+            }
         }
 
         if (request.getRole() != null && !request.getRole().trim().isEmpty()) {
             try {
-                UserRole role = UserRole.valueOf(request.getRole().toUpperCase());
-                user.setRole(role);
+                UserRole newRole = UserRole.valueOf(request.getRole().toUpperCase());
+                if (!newRole.equals(originalRole)) {
+                    user.setRole(newRole);
+                    changes.put("role", newRole.name());
+                }
             } catch (IllegalArgumentException e) {
                 throw new RuntimeException("Invalid role: " + request.getRole());
             }
         }
 
         if (request.getStoreId() != null) {
-            user.setStoreId(request.getStoreId());
+            if (!request.getStoreId().equals(originalStoreId)) {
+                user.setStoreId(request.getStoreId());
+                changes.put("storeId", request.getStoreId());
+            }
         }
 
         if (request.getActive() != null) {
-            user.setActive(request.getActive());
+            if (!request.getActive().equals(originalActive)) {
+                user.setActive(request.getActive());
+                changes.put("active", request.getActive());
+            }
         }
 
         // Update password if provided
         if (request.getPassword() != null && !request.getPassword().trim().isEmpty()) {
             user.setPassword(passwordEncoder.encode(request.getPassword()));
+            changes.put("password", "updated");
         }
 
+        // Salvează modificările
         user = userRepository.save(user);
+
+        // Trimite notificări doar dacă au fost modificări
+        if (!changes.isEmpty()) {
+            try {
+                String changeDescription = notificationService.generateChangeDescription(changes);
+                notificationService.sendUserUpdateNotifications(
+                        user.getEmail(),
+                        user.getPhone(),
+                        user.getUsername(),
+                        changeDescription
+                );
+            } catch (Exception e) {
+                // Nu întrerupem procesul dacă notificările eșuează
+                System.err.println("Failed to send update notifications: " + e.getMessage());
+            }
+        }
+
         return convertToDto(user);
     }
 
@@ -214,6 +282,24 @@ public class UserService {
         user.setActive(true);
 
         user = userRepository.save(user);
+
+        // Trimite notificări pentru utilizatorul nou creat
+        try {
+            String changeDescription = "Your account has been created by an administrator. " +
+                    "Role: " + role.name() +
+                    (user.getStoreId() != null ? ", Store ID: " + user.getStoreId() : "");
+
+            notificationService.sendUserUpdateNotifications(
+                    user.getEmail(),
+                    user.getPhone(),
+                    user.getUsername(),
+                    changeDescription
+            );
+        } catch (Exception e) {
+            // Nu întrerupem procesul dacă notificările eșuează
+            System.err.println("Failed to send creation notifications: " + e.getMessage());
+        }
+
         return convertToDto(user);
     }
 
@@ -226,6 +312,19 @@ public class UserService {
         // Soft delete - just set active to false
         user.setActive(false);
         userRepository.save(user);
+
+        // Trimite notificare despre dezactivare
+        try {
+            notificationService.sendUserUpdateNotifications(
+                    user.getEmail(),
+                    user.getPhone(),
+                    user.getUsername(),
+                    "Your account has been deactivated by an administrator."
+            );
+        } catch (Exception e) {
+            // Nu întrerupem procesul dacă notificările eșuează
+            System.err.println("Failed to send deactivation notifications: " + e.getMessage());
+        }
     }
 
     public UserDto reactivateUser(Long id, String token) {
@@ -236,6 +335,20 @@ public class UserService {
 
         user.setActive(true);
         user = userRepository.save(user);
+
+        // Trimite notificare despre reactivare
+        try {
+            notificationService.sendUserUpdateNotifications(
+                    user.getEmail(),
+                    user.getPhone(),
+                    user.getUsername(),
+                    "Your account has been reactivated by an administrator."
+            );
+        } catch (Exception e) {
+            // Nu întrerupem procesul dacă notificările eșuează
+            System.err.println("Failed to send reactivation notifications: " + e.getMessage());
+        }
+
         return convertToDto(user);
     }
 }
