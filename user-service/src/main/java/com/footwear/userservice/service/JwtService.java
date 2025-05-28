@@ -1,20 +1,19 @@
 package com.footwear.userservice.service;
 
+import com.footwear.userservice.config.JwtConfigurationManager;
 import io.jsonwebtoken.*;
-import io.jsonwebtoken.security.Keys;
 import org.springframework.stereotype.Service;
-import java.security.Key;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 
 @Service
 public class JwtService {
-    private static final String SECRET = "mySecretKeyForFootwearApplicationThatIsLongEnough";
-    private static final long EXPIRATION_TIME = 86400000; // 24 hours
 
-    private Key getSigningKey() {
-        return Keys.hmacShaKeyFor(SECRET.getBytes());
+    private final JwtConfigurationManager config;
+
+    public JwtService() {
+        this.config = JwtConfigurationManager.getInstance();
     }
 
     public String generateToken(String username, String role, Long userId, Long storeId) {
@@ -29,14 +28,14 @@ public class JwtService {
                 .setClaims(claims)
                 .setSubject(username)
                 .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis() + EXPIRATION_TIME))
-                .signWith(getSigningKey(), SignatureAlgorithm.HS256)
+                .setExpiration(new Date(System.currentTimeMillis() + config.getExpirationTime()))
+                .signWith(config.getSigningKey(), SignatureAlgorithm.HS256)
                 .compact();
     }
 
     public Claims extractClaims(String token) {
         return Jwts.parserBuilder()
-                .setSigningKey(getSigningKey())
+                .setSigningKey(config.getSigningKey())
                 .build()
                 .parseClaimsJws(token)
                 .getBody();
@@ -49,5 +48,17 @@ public class JwtService {
         } catch (JwtException e) {
             return false;
         }
+    }
+
+    // Additional method to check configuration health
+    public boolean isConfigurationHealthy() {
+        return config.isConfigurationValid();
+    }
+
+    // Get token expiration info for debugging
+    public String getTokenInfo() {
+        return String.format("JWT Config - Expiration: %d hours, Key length: %d",
+                config.getExpirationInHours(),
+                config.getSecretKey().length());
     }
 }

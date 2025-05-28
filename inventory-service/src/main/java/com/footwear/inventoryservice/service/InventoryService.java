@@ -1,5 +1,7 @@
 package com.footwear.inventoryservice.service;
 
+import com.footwear.inventoryservice.adapter.ExternalServiceAdapter;
+import com.footwear.inventoryservice.adapter.NotificationType;
 import com.footwear.inventoryservice.dto.*;
 import com.footwear.inventoryservice.entity.Inventory;
 import com.footwear.inventoryservice.entity.Store;
@@ -24,6 +26,9 @@ public class InventoryService {
 
     @Autowired
     private JwtValidationService jwtValidationService;
+
+    @Autowired
+    private ExternalServiceAdapter notificationService;
 
     // PUBLIC METHODS - pentru căutări fără autentificare
 
@@ -158,8 +163,27 @@ public class InventoryService {
             throw new RuntimeException("Insufficient stock. Available: " + item.getQuantity());
         }
 
+        // Process the sale
         item.setQuantity(item.getQuantity() - request.getQuantity());
         item = inventoryRepository.save(item);
+
+        // Check for low stock and send notification using Adapter Pattern
+        if (item.getQuantity() <= item.getMinStock()) {
+            Store store = storeRepository.findById(item.getStoreId()).orElse(null);
+            if (store != null) {
+                String productInfo = String.format("Product ID: %d, Color: %s, Size: %d - Current stock: %d (Min: %d)",
+                        item.getProductId(), item.getColor(), item.getSize(), item.getQuantity(), item.getMinStock());
+
+                // Use adapter to send notification
+                boolean notificationSent = notificationService.sendLowStockAlert("manager@" + store.getName().toLowerCase() + ".com", productInfo);
+
+                if (notificationSent) {
+                    System.out.println("Low stock notification sent successfully for store: " + store.getName());
+                } else {
+                    System.out.println("Failed to send low stock notification for store: " + store.getName());
+                }
+            }
+        }
 
         return convertToDto(item);
     }
@@ -180,6 +204,9 @@ public class InventoryService {
                         request.getProductId(), request.getStoreId(), request.getColor(), request.getSize())
                 .orElse(new Inventory());
 
+        // Store previous quantity for comparison
+        Integer previousQuantity = item.getQuantity() != null ? item.getQuantity() : 0;
+
         item.setProductId(request.getProductId());
         item.setStoreId(request.getStoreId());
         item.setColor(request.getColor());
@@ -188,6 +215,19 @@ public class InventoryService {
         item.setMinStock(request.getMinStock());
 
         item = inventoryRepository.save(item);
+
+        // Send restock notification if stock was increased significantly
+        if (request.getQuantity() > previousQuantity + 10) {
+            Store store = storeRepository.findById(item.getStoreId()).orElse(null);
+            if (store != null) {
+                String restockInfo = String.format("Product ID: %d, Color: %s, Size: %d - Restocked from %d to %d units",
+                        item.getProductId(), item.getColor(), item.getSize(), previousQuantity, item.getQuantity());
+
+                notificationService.sendNotification("inventory@" + store.getName().toLowerCase() + ".com",
+                        "Inventory restocked: " + restockInfo, NotificationType.EMAIL);
+            }
+        }
+
         return convertToDto(item);
     }
 
@@ -218,6 +258,17 @@ public class InventoryService {
         item.setMinStock(request.getMinStock());
 
         item = inventoryRepository.save(item);
+
+        // Send notification about new inventory item
+        Store store = storeRepository.findById(item.getStoreId()).orElse(null);
+        if (store != null) {
+            String newItemInfo = String.format("New inventory item created - Product ID: %d, Color: %s, Size: %d, Quantity: %d",
+                    item.getProductId(), item.getColor(), item.getSize(), item.getQuantity());
+
+            notificationService.sendNotification("inventory@" + store.getName().toLowerCase() + ".com",
+                    "New inventory item: " + newItemInfo, NotificationType.EMAIL);
+        }
+
         return convertToDto(item);
     }
 
@@ -233,6 +284,18 @@ public class InventoryService {
         }
 
         List<Inventory> items = inventoryRepository.findLowStockItemsByStore(storeId);
+
+        // Send consolidated low stock alert if there are multiple items
+        if (items.size() >= 3) {
+            Store store = storeRepository.findById(storeId).orElse(null);
+            if (store != null) {
+                String alertMessage = String.format("Multiple low stock items detected in %s: %d items need attention",
+                        store.getName(), items.size());
+                notificationService.sendNotification("manager@" + store.getName().toLowerCase() + ".com",
+                        alertMessage, NotificationType.EMAIL);
+            }
+        }
+
         return items.stream()
                 .map(this::convertToDto)
                 .collect(Collectors.toList());
@@ -253,6 +316,13 @@ public class InventoryService {
         jwtValidationService.validateManagerRole(token);
 
         List<Inventory> items = inventoryRepository.findAllLowStockItems();
+
+        // Send management report about overall low stock situation
+        if (items.size() >= 10) {
+            String managementAlert = String.format("Company-wide low stock alert: %d items across all stores need immediate attention", items.size());
+            notificationService.sendNotification("management@company.com", managementAlert, NotificationType.EMAIL);
+        }
+
         return items.stream()
                 .map(this::convertToDto)
                 .collect(Collectors.toList());

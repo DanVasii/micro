@@ -1,5 +1,7 @@
 package com.footwear.apigateway.controller;
 
+import com.footwear.apigateway.factory.ResponseFactory;
+import com.footwear.apigateway.factory.ResponseType;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
@@ -26,10 +28,12 @@ public class GatewayController {
     @Value("${app.services.inventory}")
     private String inventoryServiceUrl;
 
-    // Health check pentru gateway
+    // Health check fyrir gateway
     @GetMapping("/health")
     public ResponseEntity<String> health() {
-        return ResponseEntity.ok("{\"status\":\"UP\",\"service\":\"api-gateway\"}");
+        ResponseFactory factory = ResponseFactory.getFactory(ResponseType.SUCCESS);
+        return factory.createResponse("API Gateway is running",
+                "{\"service\":\"api-gateway\",\"version\":\"1.0\",\"timestamp\":\"" + System.currentTimeMillis() + "\"}");
     }
 
     // ==========================================
@@ -128,7 +132,7 @@ public class GatewayController {
     }
 
     // ==========================================
-    // INVENTORY ROUTES - NEW!
+    // INVENTORY ROUTES
     // ==========================================
 
     @GetMapping("/api/inventory/**")
@@ -166,7 +170,7 @@ public class GatewayController {
     }
 
     // ==========================================
-    // TEST ROUTES (pentru debugging)
+    // TEST ROUTES (pentru debugging) - Updated with Factory
     // ==========================================
 
     @GetMapping("/test/user")
@@ -174,9 +178,12 @@ public class GatewayController {
         try {
             String url = userServiceUrl + "/api/users/test";
             String response = restTemplate.getForObject(url, String.class);
-            return ResponseEntity.ok("{\"gateway\":\"OK\",\"user-service\":\"" + response + "\"}");
+            ResponseFactory factory = ResponseFactory.getFactory(ResponseType.SUCCESS);
+            return factory.createResponse("User service test completed",
+                    "{\"gateway\":\"OK\",\"user-service\":\"" + response + "\"}");
         } catch (Exception e) {
-            return ResponseEntity.status(500).body("{\"error\":\"User service unavailable\",\"details\":\"" + e.getMessage() + "\"}");
+            ResponseFactory factory = ResponseFactory.getFactory(ResponseType.ERROR);
+            return factory.createResponse("User service unavailable", "SERVICE_DOWN");
         }
     }
 
@@ -185,9 +192,11 @@ public class GatewayController {
         try {
             String url = userServiceUrl + "/api/users/health";
             String response = restTemplate.getForObject(url, String.class);
-            return ResponseEntity.ok("{\"gateway\":\"OK\",\"user-service-health\":" + response + "}");
+            ResponseFactory factory = ResponseFactory.getFactory(ResponseType.SUCCESS);
+            return factory.createResponse("User service health check completed", response);
         } catch (Exception e) {
-            return ResponseEntity.status(500).body("{\"error\":\"User service health check failed\",\"details\":\"" + e.getMessage() + "\"}");
+            ResponseFactory factory = ResponseFactory.getFactory(ResponseType.ERROR);
+            return factory.createResponse("User service health check failed", "HEALTH_CHECK_FAILED");
         }
     }
 
@@ -196,9 +205,12 @@ public class GatewayController {
         try {
             String url = productServiceUrl + "/api/products/test";
             String response = restTemplate.getForObject(url, String.class);
-            return ResponseEntity.ok("{\"gateway\":\"OK\",\"product-service\":\"" + response + "\"}");
+            ResponseFactory factory = ResponseFactory.getFactory(ResponseType.SUCCESS);
+            return factory.createResponse("Product service test completed",
+                    "{\"gateway\":\"OK\",\"product-service\":\"" + response + "\"}");
         } catch (Exception e) {
-            return ResponseEntity.status(500).body("{\"error\":\"Product service unavailable\",\"details\":\"" + e.getMessage() + "\"}");
+            ResponseFactory factory = ResponseFactory.getFactory(ResponseType.ERROR);
+            return factory.createResponse("Product service unavailable", "SERVICE_DOWN");
         }
     }
 
@@ -207,9 +219,11 @@ public class GatewayController {
         try {
             String url = productServiceUrl + "/api/products/health";
             String response = restTemplate.getForObject(url, String.class);
-            return ResponseEntity.ok("{\"gateway\":\"OK\",\"product-service-health\":" + response + "}");
+            ResponseFactory factory = ResponseFactory.getFactory(ResponseType.SUCCESS);
+            return factory.createResponse("Product service health check completed", response);
         } catch (Exception e) {
-            return ResponseEntity.status(500).body("{\"error\":\"Product service health check failed\",\"details\":\"" + e.getMessage() + "\"}");
+            ResponseFactory factory = ResponseFactory.getFactory(ResponseType.ERROR);
+            return factory.createResponse("Product service health check failed", "HEALTH_CHECK_FAILED");
         }
     }
 
@@ -218,9 +232,12 @@ public class GatewayController {
         try {
             String url = inventoryServiceUrl + "/api/inventory/test";
             String response = restTemplate.getForObject(url, String.class);
-            return ResponseEntity.ok("{\"gateway\":\"OK\",\"inventory-service\":\"" + response + "\"}");
+            ResponseFactory factory = ResponseFactory.getFactory(ResponseType.SUCCESS);
+            return factory.createResponse("Inventory service test completed",
+                    "{\"gateway\":\"OK\",\"inventory-service\":\"" + response + "\"}");
         } catch (Exception e) {
-            return ResponseEntity.status(500).body("{\"error\":\"Inventory service unavailable\",\"details\":\"" + e.getMessage() + "\"}");
+            ResponseFactory factory = ResponseFactory.getFactory(ResponseType.ERROR);
+            return factory.createResponse("Inventory service unavailable", "SERVICE_DOWN");
         }
     }
 
@@ -229,15 +246,21 @@ public class GatewayController {
         try {
             String url = inventoryServiceUrl + "/api/inventory/health";
             String response = restTemplate.getForObject(url, String.class);
-            return ResponseEntity.ok("{\"gateway\":\"OK\",\"inventory-service-health\":" + response + "}");
+            ResponseFactory factory = ResponseFactory.getFactory(ResponseType.SUCCESS);
+            return factory.createResponse("Inventory service health check completed", response);
         } catch (Exception e) {
-            return ResponseEntity.status(500).body("{\"error\":\"Inventory service health check failed\",\"details\":\"" + e.getMessage() + "\"}");
+            ResponseFactory factory = ResponseFactory.getFactory(ResponseType.ERROR);
+            return factory.createResponse("Inventory service health check failed", "HEALTH_CHECK_FAILED");
         }
     }
 
     @GetMapping("/config")
     public ResponseEntity<String> showConfig() {
-        return ResponseEntity.ok("{\"userServiceUrl\":\"" + userServiceUrl + "\",\"productServiceUrl\":\"" + productServiceUrl + "\",\"inventoryServiceUrl\":\"" + inventoryServiceUrl + "\"}");
+        ResponseFactory factory = ResponseFactory.getFactory(ResponseType.SUCCESS);
+        String configData = String.format(
+                "{\"userServiceUrl\":\"%s\",\"productServiceUrl\":\"%s\",\"inventoryServiceUrl\":\"%s\"}",
+                userServiceUrl, productServiceUrl, inventoryServiceUrl);
+        return factory.createResponse("Configuration retrieved", configData);
     }
 
     // ==========================================
@@ -285,8 +308,8 @@ public class GatewayController {
             return ResponseEntity.status(e.getStatusCode())
                     .body(e.getResponseBodyAsString());
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("{\"error\":\"Service unavailable: " + e.getMessage() + "\"}");
+            ResponseFactory factory = ResponseFactory.getFactory(ResponseType.ERROR);
+            return factory.createResponse("Service unavailable: " + e.getMessage(), "GATEWAY_ERROR");
         }
     }
 

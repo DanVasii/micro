@@ -1,17 +1,16 @@
-// user-service/src/main/java/com/footwear/userservice/service/UserService.java
 package com.footwear.userservice.service;
 
 import com.footwear.userservice.dto.*;
 import com.footwear.userservice.entity.User;
 import com.footwear.userservice.entity.UserRole;
 import com.footwear.userservice.repository.UserRepository;
+import com.footwear.userservice.strategy.UserValidationContext;
+import com.footwear.userservice.strategy.ValidationResult;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -24,7 +23,7 @@ public class UserService {
     private JwtService jwtService;
 
     @Autowired
-    private NotificationService notificationService;
+    private UserValidationContext validationContext;
 
     private BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
@@ -56,6 +55,12 @@ public class UserService {
     }
 
     public UserDto register(RegisterRequest request) {
+        // Use Strategy Pattern for validation
+        ValidationResult validation = validationContext.validateUserRegistration(request);
+        if (!validation.isValid()) {
+            throw new RuntimeException("Validation failed: " + String.join(", ", validation.getErrors()));
+        }
+
         // Verifică dacă username-ul există deja
         if (userRepository.findByUsername(request.getUsername()).isPresent()) {
             throw new RuntimeException("Username already exists");
@@ -69,19 +74,6 @@ public class UserService {
         user.setRole(UserRole.CLIENT); // Doar clienți prin înregistrare publică
 
         user = userRepository.save(user);
-
-        // Trimite email de bun venit (opțional)
-        try {
-            notificationService.sendUserUpdateEmail(
-                    user.getEmail(),
-                    user.getUsername(),
-                    "Welcome to FootwearChain! Your account has been created successfully."
-            );
-        } catch (Exception e) {
-            // Nu întrerupem procesul dacă email-ul eșuează
-            System.err.println("Failed to send welcome email: " + e.getMessage());
-        }
-
         return convertToDto(user);
     }
 
@@ -109,31 +101,6 @@ public class UserService {
                 .collect(Collectors.toList());
     }
 
-    private void validateAdminRole(String token) {
-        if (token.startsWith("Bearer ")) {
-            token = token.substring(7);
-        }
-
-        var claims = jwtService.extractClaims(token);
-        String role = claims.get("role", String.class);
-
-        if (!"ADMIN".equals(role)) {
-            throw new RuntimeException("Access denied - Admin role required");
-        }
-    }
-
-    private UserDto convertToDto(User user) {
-        UserDto dto = new UserDto();
-        dto.setId(user.getId());
-        dto.setUsername(user.getUsername());
-        dto.setEmail(user.getEmail());
-        dto.setPhone(user.getPhone());
-        dto.setRole(user.getRole().name());
-        dto.setStoreId(user.getStoreId());
-        dto.setActive(user.isActive());
-        return dto;
-    }
-
     public UserDto getUserById(Long id, String token) {
         validateAdminRole(token);
         User user = userRepository.findById(id)
@@ -144,116 +111,68 @@ public class UserService {
     public UserDto updateUser(Long id, UpdateUserRequest request, String token) {
         validateAdminRole(token);
 
+        // Use Strategy Pattern for validation
+        ValidationResult validation = validationContext.validateEmployeeUpdate(request);
+        if (!validation.isValid()) {
+            throw new RuntimeException("Validation failed: " + String.join(", ", validation.getErrors()));
+        }
+
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        // Salvează valorile originale pentru comparație
-        String originalUsername = user.getUsername();
-        String originalEmail = user.getEmail();
-        String originalPhone = user.getPhone();
-        UserRole originalRole = user.getRole();
-        Long originalStoreId = user.getStoreId();
-        boolean originalActive = user.isActive();
-
-        // Colectează modificările
-        Map<String, Object> changes = new HashMap<>();
-
         // Update fields if provided
         if (request.getUsername() != null && !request.getUsername().trim().isEmpty()) {
-            if (!request.getUsername().equals(originalUsername)) {
-                // Check if username already exists for another user
-                userRepository.findByUsername(request.getUsername())
-                        .ifPresent(existingUser -> {
-                            if (!existingUser.getId().equals(id)) {
-                                throw new RuntimeException("Username already exists");
-                            }
-                        });
-                user.setUsername(request.getUsername().trim());
-                changes.put("username", request.getUsername());
-            }
+            // Check if username already exists for another user
+            userRepository.findByUsername(request.getUsername())
+                    .ifPresent(existingUser -> {
+                        if (!existingUser.getId().equals(id)) {
+                            throw new RuntimeException("Username already exists");
+                        }
+                    });
+            user.setUsername(request.getUsername().trim());
         }
 
         if (request.getEmail() != null && !request.getEmail().trim().isEmpty()) {
-            if (!request.getEmail().equals(originalEmail)) {
-                user.setEmail(request.getEmail().trim());
-                changes.put("email", request.getEmail());
-            }
+            user.setEmail(request.getEmail().trim());
         }
 
         if (request.getPhone() != null) {
-            String newPhone = request.getPhone().trim().isEmpty() ? null : request.getPhone().trim();
-            if (!java.util.Objects.equals(newPhone, originalPhone)) {
-                user.setPhone(newPhone);
-                changes.put("phone", newPhone);
-            }
+            user.setPhone(request.getPhone().trim().isEmpty() ? null : request.getPhone().trim());
         }
 
         if (request.getRole() != null && !request.getRole().trim().isEmpty()) {
             try {
-                UserRole newRole = UserRole.valueOf(request.getRole().toUpperCase());
-                if (!newRole.equals(originalRole)) {
-                    user.setRole(newRole);
-                    changes.put("role", newRole.name());
-                }
+                UserRole role = UserRole.valueOf(request.getRole().toUpperCase());
+                user.setRole(role);
             } catch (IllegalArgumentException e) {
                 throw new RuntimeException("Invalid role: " + request.getRole());
             }
         }
 
         if (request.getStoreId() != null) {
-            if (!request.getStoreId().equals(originalStoreId)) {
-                user.setStoreId(request.getStoreId());
-                changes.put("storeId", request.getStoreId());
-            }
+            user.setStoreId(request.getStoreId());
         }
 
         if (request.getActive() != null) {
-            if (!request.getActive().equals(originalActive)) {
-                user.setActive(request.getActive());
-                changes.put("active", request.getActive());
-            }
+            user.setActive(request.getActive());
         }
 
         // Update password if provided
         if (request.getPassword() != null && !request.getPassword().trim().isEmpty()) {
             user.setPassword(passwordEncoder.encode(request.getPassword()));
-            changes.put("password", "updated");
         }
 
-        // Salvează modificările
         user = userRepository.save(user);
-
-        // Trimite notificări doar dacă au fost modificări
-        if (!changes.isEmpty()) {
-            try {
-                String changeDescription = notificationService.generateChangeDescription(changes);
-                notificationService.sendUserUpdateNotifications(
-                        user.getEmail(),
-                        user.getPhone(),
-                        user.getUsername(),
-                        changeDescription
-                );
-            } catch (Exception e) {
-                // Nu întrerupem procesul dacă notificările eșuează
-                System.err.println("Failed to send update notifications: " + e.getMessage());
-            }
-        }
-
         return convertToDto(user);
     }
 
     public UserDto createUser(CreateUserRequest request, String token) {
         validateAdminRole(token);
 
-        // Validate required fields
-        if (request.getUsername() == null || request.getUsername().trim().isEmpty()) {
-            throw new RuntimeException("Username is required");
-        }
-        if (request.getPassword() == null || request.getPassword().trim().isEmpty()) {
-            throw new RuntimeException("Password is required");
-        }
-        if (request.getEmail() == null || request.getEmail().trim().isEmpty()) {
-            throw new RuntimeException("Email is required");
+        // Use Strategy Pattern for validation
+        ValidationResult validation = validationContext.validateAdminUserCreation(request);
+        if (!validation.isValid()) {
+            throw new RuntimeException("Validation failed: " + String.join(", ", validation.getErrors()));
         }
 
         // Check if username already exists
@@ -282,24 +201,6 @@ public class UserService {
         user.setActive(true);
 
         user = userRepository.save(user);
-
-        // Trimite notificări pentru utilizatorul nou creat
-        try {
-            String changeDescription = "Your account has been created by an administrator. " +
-                    "Role: " + role.name() +
-                    (user.getStoreId() != null ? ", Store ID: " + user.getStoreId() : "");
-
-            notificationService.sendUserUpdateNotifications(
-                    user.getEmail(),
-                    user.getPhone(),
-                    user.getUsername(),
-                    changeDescription
-            );
-        } catch (Exception e) {
-            // Nu întrerupem procesul dacă notificările eșuează
-            System.err.println("Failed to send creation notifications: " + e.getMessage());
-        }
-
         return convertToDto(user);
     }
 
@@ -312,19 +213,6 @@ public class UserService {
         // Soft delete - just set active to false
         user.setActive(false);
         userRepository.save(user);
-
-        // Trimite notificare despre dezactivare
-        try {
-            notificationService.sendUserUpdateNotifications(
-                    user.getEmail(),
-                    user.getPhone(),
-                    user.getUsername(),
-                    "Your account has been deactivated by an administrator."
-            );
-        } catch (Exception e) {
-            // Nu întrerupem procesul dacă notificările eșuează
-            System.err.println("Failed to send deactivation notifications: " + e.getMessage());
-        }
     }
 
     public UserDto reactivateUser(Long id, String token) {
@@ -335,20 +223,36 @@ public class UserService {
 
         user.setActive(true);
         user = userRepository.save(user);
+        return convertToDto(user);
+    }
 
-        // Trimite notificare despre reactivare
-        try {
-            notificationService.sendUserUpdateNotifications(
-                    user.getEmail(),
-                    user.getPhone(),
-                    user.getUsername(),
-                    "Your account has been reactivated by an administrator."
-            );
-        } catch (Exception e) {
-            // Nu întrerupem procesul dacă notificările eșuează
-            System.err.println("Failed to send reactivation notifications: " + e.getMessage());
+    // Additional method to demonstrate strategy pattern usage
+    public ValidationResult validateUserData(Object userRequest, String operationType) {
+        return validationContext.getValidationStrategy(operationType).validate(userRequest);
+    }
+
+    private void validateAdminRole(String token) {
+        if (token.startsWith("Bearer ")) {
+            token = token.substring(7);
         }
 
-        return convertToDto(user);
+        var claims = jwtService.extractClaims(token);
+        String role = claims.get("role", String.class);
+
+        if (!"ADMIN".equals(role)) {
+            throw new RuntimeException("Access denied - Admin role required");
+        }
+    }
+
+    private UserDto convertToDto(User user) {
+        UserDto dto = new UserDto();
+        dto.setId(user.getId());
+        dto.setUsername(user.getUsername());
+        dto.setEmail(user.getEmail());
+        dto.setPhone(user.getPhone());
+        dto.setRole(user.getRole().name());
+        dto.setStoreId(user.getStoreId());
+        dto.setActive(user.isActive());
+        return dto;
     }
 }

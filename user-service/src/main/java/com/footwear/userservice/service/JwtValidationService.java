@@ -1,8 +1,9 @@
-package com.footwear.inventoryservice.service;
+package com.footwear.productservice.service;
 
 import com.footwear.userservice.config.JwtConfigurationManager;
 import io.jsonwebtoken.*;
 import org.springframework.stereotype.Service;
+
 import java.util.Date;
 
 @Service
@@ -26,15 +27,6 @@ public class JwtValidationService {
                 .getBody();
     }
 
-    public void validateEmployeeRole(String token) {
-        Claims claims = validateToken(token);
-        String role = claims.get("role", String.class);
-
-        if (!"EMPLOYEE".equals(role) && !"MANAGER".equals(role) && !"ADMIN".equals(role)) {
-            throw new RuntimeException("Access denied - Employee role required");
-        }
-    }
-
     public void validateManagerRole(String token) {
         Claims claims = validateToken(token);
         String role = claims.get("role", String.class);
@@ -44,31 +36,7 @@ public class JwtValidationService {
         }
     }
 
-    public Long getStoreIdFromToken(String token) {
-        Claims claims = validateToken(token);
-        return claims.get("storeId", Long.class);
-    }
-
-    public String getRoleFromToken(String token) {
-        Claims claims = validateToken(token);
-        return claims.get("role", String.class);
-    }
-
-    public Long getUserIdFromToken(String token) {
-        Claims claims = validateToken(token);
-        return claims.get("userId", Long.class);
-    }
-
-    // Additional helper methods
-    public boolean isTokenValid(String token) {
-        try {
-            validateToken(token);
-            return true;
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
+    // Additional helper methods using singleton config
     public boolean isTokenExpired(String token) {
         try {
             Claims claims = validateToken(token);
@@ -78,11 +46,19 @@ public class JwtValidationService {
         }
     }
 
-    // Method to get token expiration for logging/debugging
-    public Date getTokenExpiration(String token) {
+    public String getRoleFromToken(String token) {
         try {
             Claims claims = validateToken(token);
-            return claims.getExpiration();
+            return claims.get("role", String.class);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    public Long getUserIdFromToken(String token) {
+        try {
+            Claims claims = validateToken(token);
+            return claims.get("userId", Long.class);
         } catch (Exception e) {
             return null;
         }
